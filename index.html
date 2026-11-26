@@ -35,7 +35,7 @@
   <meta name="twitter:card" content="summary_large_image">
   <script>if(location.search==='?chat')location.replace('https://wa.me/message/AU7N3AUUT7OIB1')</script>
 
-  <link rel="stylesheet" href="css/site.css?v=52">
+  <link rel="stylesheet" href="css/site.css?v=53">
 </head>
 <body class="uc">
 
@@ -145,15 +145,20 @@
   </footer>
 
   <!-- the liquid: blur the shapes, then cut the blur back to a hard edge, so shapes that come
-       close melt into one; then a 1px rim in the border colour around the whole blob -->
+       close melt into one; then a 1px rim in the border colour around the whole blob, and a soft
+       shadow under it made from the same blur (moved down a little), so it costs almost nothing.
+       The filter works only inside the liquid's own box (which already leaves room for the blur). -->
   <svg class="defs" width="0" height="0" aria-hidden="true" focusable="false">
-    <filter id="vl-goo" x="-20%" y="-40%" width="140%" height="180%" color-interpolation-filters="sRGB">
+    <filter id="vl-goo" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">
       <feGaussianBlur in="SourceGraphic" stdDeviation="9" result="blur"/>
       <feColorMatrix in="blur" type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 24 -11" result="goo"/>
       <feMorphology in="goo" operator="dilate" radius="1" result="rim-shape"/>
       <feFlood class="goo-rim" result="rim-colour"/>
       <feComposite in="rim-colour" in2="rim-shape" operator="in" result="rim"/>
-      <feMerge><feMergeNode in="rim"/><feMergeNode in="goo"/></feMerge>
+      <feOffset in="blur" dy="7" result="shadow-shape"/>
+      <feFlood class="goo-shadow" result="shadow-colour"/>
+      <feComposite in="shadow-colour" in2="shadow-shape" operator="in" result="shadow"/>
+      <feMerge><feMergeNode in="shadow"/><feMergeNode in="rim"/><feMergeNode in="goo"/></feMerge>
     </filter>
   </svg>
 

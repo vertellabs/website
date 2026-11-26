@@ -263,10 +263,12 @@ h1 {
 .ct-goo {
   position: absolute; pointer-events: none;
   inset: -50px calc((var(--main-w) - var(--card-w) * 2 - var(--knob) - var(--gap) * 2) / 2 - 24px);
-  filter: url(#vl-goo) drop-shadow(0 1px 1px color-mix(in srgb, var(--vl-ink) 5%, transparent))
-                       drop-shadow(0 14px 22px color-mix(in srgb, var(--vl-ink) 9%, transparent));
+  /* Only the liquid filter. Its shadow is made inside the filter (see index.html): CSS drop-shadows
+     here were two more full redraws of the blob on every frame, which made phones stutter. */
+  filter: url(#vl-goo);
 }
 .goo-rim { flood-color: var(--vl-border); }
+.goo-shadow { flood-color: var(--vl-ink); flood-opacity: .1; }
 .defs { position: absolute; width: 0; height: 0; overflow: hidden; }
 
 /* every piece is placed from the centre */
