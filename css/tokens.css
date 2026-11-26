@@ -1,0 +1,79 @@
+/* Vertel Labs brand tokens v1.0.0 — keep in sync with tokens.json (change both together).
+   Use the role variables (--vl-bg, --vl-text, --vl-accent …) in your CSS; they switch for dark mode automatically. */
+:root {
+  --vl-crimson: #B0142C;
+  --vl-crimson-on-dark: #E73B4E;
+  --vl-ground-light: #F7F6F3;
+  --vl-ground-dark: #141213;
+  --vl-ink: #1B1819;
+  --vl-paper: #FFFFFF;
+  --vl-crimson-50: #FFF2F1;
+  --vl-crimson-100: #FDE3E2;
+  --vl-crimson-200: #FAC7C6;
+  --vl-crimson-300: #F6A2A1;
+  --vl-crimson-400: #F07477;
+  --vl-crimson-500: #E73B4E;
+  --vl-crimson-600: #CB293D;
+  --vl-crimson-700: #B0142C;
+  --vl-crimson-800: #8D0A20;
+  --vl-crimson-900: #6E0316;
+  --vl-crimson-950: #4F000C;
+  --vl-neutral-50: #F7F6F3;
+  --vl-neutral-100: #EBE9E6;
+  --vl-neutral-200: #DAD9D6;
+  --vl-neutral-300: #BFBDBB;
+  --vl-neutral-400: #9B9796;
+  --vl-neutral-500: #777472;
+  --vl-neutral-600: #5D5A59;
+  --vl-neutral-700: #454141;
+  --vl-neutral-800: #2E2A2B;
+  --vl-neutral-900: #1B1819;
+  --vl-neutral-950: #141213;
+  --vl-font: "Vertel Round", "Vertel Round Fallback", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --vl-bg: #F7F6F3;
+  --vl-surface: #FFFFFF;
+  --vl-surface-2: #EBE9E6;
+  --vl-border: #DAD9D6;
+  --vl-border-strong: #BFBDBB;
+  --vl-text: #1B1819;
+  --vl-text-muted: #5D5A59;
+  --vl-accent: #B0142C;
+  --vl-accent-hover: #8D0A20;
+  --vl-on-accent: #FFFFFF;
+  --vl-accent-soft: #FFF2F1;
+  --vl-link: #B0142C;
+  --vl-focus: #B0142C;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --vl-bg: #141213;
+    --vl-surface: #1B1819;
+    --vl-surface-2: #2E2A2B;
+    --vl-border: #454141;
+    --vl-border-strong: #5D5A59;
+    --vl-text: #F7F6F3;
+    --vl-text-muted: #9B9796;
+    --vl-accent: #E73B4E;
+    --vl-accent-hover: #F07477;
+    --vl-on-accent: #141213;
+    --vl-accent-soft: #4F000C;
+    --vl-link: #E73B4E;
+    --vl-focus: #E73B4E;
+  }
+}
+:root[data-theme="dark"] {
+  --vl-bg: #141213;
+  --vl-surface: #1B1819;
+  --vl-surface-2: #2E2A2B;
+  --vl-border: #454141;
+  --vl-border-strong: #5D5A59;
+  --vl-text: #F7F6F3;
+  --vl-text-muted: #9B9796;
+  --vl-accent: #E73B4E;
+  --vl-accent-hover: #F07477;
+  --vl-on-accent: #141213;
+  --vl-accent-soft: #4F000C;
+  --vl-link: #E73B4E;
+  --vl-focus: #E73B4E;
+}

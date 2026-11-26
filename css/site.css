@@ -1,0 +1,300 @@
+/* Vertel Labs — under construction page.
+   Every colour comes from tokens.css (var(--vl-…)). Dark mode follows the visitor's device
+   until they choose with the coin switch in the header. */
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  font-family: var(--vl-font);
+  font-size: 17px;
+  line-height: 1.6;
+  color: var(--vl-text);
+  background: var(--vl-bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+img, svg { display: block; max-width: 100%; }
+h1, h2, p { margin: 0; }
+a { color: var(--vl-link); text-decoration: none; }
+:focus-visible { outline: 2px solid var(--vl-focus); outline-offset: 3px; border-radius: 6px; }
+::selection { background: var(--vl-accent); color: var(--vl-on-accent); }
+a, button { -webkit-tap-highlight-color: transparent; }   /* no grey flash on phones */
+
+:root {
+  --gutter: clamp(20px, 5vw, 48px);
+  --ease: cubic-bezier(.2, .7, .2, 1);
+  --shadow: 0 1px 2px color-mix(in srgb, var(--vl-ink) 6%, transparent),
+            0 24px 48px -16px color-mix(in srgb, var(--vl-ink) 22%, transparent);
+}
+.wrap { width: 100%; max-width: calc(1200px + var(--gutter) * 2); margin-inline: auto; padding-inline: var(--gutter); }
+
+/* ── page layout ─────────────────────────────────────── */
+body.uc {
+  min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; overflow-x: clip;
+  position: relative; isolation: isolate;
+  /* soft light falling from the top of the page */
+  background:
+    radial-gradient(90% 60% at 50% -10%, var(--vl-surface) 0%, transparent 70%) fixed,
+    var(--vl-bg);
+}
+/* Whole-page dot grid: fine dots every 24px, strongest in the middle
+   and fading out toward the edges so the page stays calm.
+   After the intro, the dots spread out in a soft circle from the coin (screen centre):
+   --dots-r grows from 0 to past the corners. */
+@property --dots-r { syntax: "<length>"; inherits: false; initial-value: 0px; }
+body.uc::before {
+  content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background-image: radial-gradient(circle at center, var(--vl-border-strong) 1.2px, transparent 1.6px);
+  background-size: 24px 24px;
+  background-position: center center;
+  --dots-r: calc(75vmax + 200px);
+  -webkit-mask-image:
+    radial-gradient(circle at 50% 50%, #000 calc(var(--dots-r) - 200px), transparent var(--dots-r)),
+    radial-gradient(ellipse 80% 75% at 50% 45%, #000 30%, transparent 100%);
+  mask-image:
+    radial-gradient(circle at 50% 50%, #000 calc(var(--dots-r) - 200px), transparent var(--dots-r)),
+    radial-gradient(ellipse 80% 75% at 50% 45%, #000 30%, transparent 100%);
+  -webkit-mask-composite: source-in;
+  mask-composite: intersect;
+  transition: --dots-r 1.6s cubic-bezier(.25, .6, .2, 1);
+}
+/* while the intro is up the dots are hidden (8s safety in case the script never runs) */
+.intro-on body.uc::before { --dots-r: 0px; animation: dots-safety 0s linear 8s forwards; }
+@keyframes dots-safety { to { --dots-r: calc(75vmax + 200px); } }
+
+.top {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding-top: clamp(16px, 4vh, 32px); padding-bottom: clamp(12px, 3vh, 32px);
+}
+.logo { display: inline-block; border-radius: 4px; flex: none; }
+.logo img { height: clamp(32px, 5vh, 40px); width: auto; }
+
+/* header right: where we are + local time */
+.local {
+  display: inline-flex; align-items: center; gap: 10px;
+  font-size: 13px; font-weight: 500; color: var(--vl-text-muted); white-space: nowrap;
+}
+.local-sep { width: 1px; height: 12px; background: var(--vl-border-strong); }
+.local-time { color: var(--vl-text); font-variant-numeric: tabular-nums; }
+.dot { position: relative; width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--vl-accent); }
+.dot::after {
+  content: ""; position: absolute; inset: -4px; border-radius: 50%;
+  border: 1.5px solid var(--vl-accent); opacity: 0;
+  animation: ping 2.4s var(--ease) infinite;
+}
+@keyframes ping { 0% { transform: scale(.4); opacity: .7; } 80%, 100% { transform: scale(1.3); opacity: 0; } }
+
+.top-right { display: flex; align-items: center; gap: clamp(12px, 2.4vw, 20px); }
+
+/* ── light / dark ─────────────────────────────────────
+   Follows the device until the visitor flips the coin; their choice is then
+   saved as <html data-theme="light|dark"> (tokens.css switches the colours). */
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"]  { color-scheme: dark; }
+.only-dark { display: none !important; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .only-light { display: none !important; }
+  :root:not([data-theme="light"]) .only-dark  { display: block !important; }
+}
+:root[data-theme="dark"] .only-light { display: none !important; }
+:root[data-theme="dark"] .only-dark  { display: block !important; }
+
+/* The switch: a coin. Front shows the sun (light) or moon (dark); the back shows
+   the Vertel coin mark (official small cut). A click turns it over once. */
+.theme-coin {
+  position: relative; flex: none;
+  width: 38px; height: 38px; padding: 0;
+  border: 0; border-radius: 50%; background: none; color: var(--vl-text);
+  cursor: pointer; perspective: 240px;
+}
+.coin { position: absolute; inset: 0; display: block; transform-style: preserve-3d; }
+.coin-face {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  border-radius: 50%; border: 1px solid var(--vl-border-strong); background: var(--vl-surface);
+  backface-visibility: hidden; -webkit-backface-visibility: hidden;
+  box-shadow: inset 0 0 0 3px var(--vl-surface), inset 0 0 0 4px var(--vl-border); /* coin rim */
+  transition: border-color .2s var(--ease);
+}
+.coin-back { transform: rotateY(180deg); }
+.coin-face svg { width: 18px; height: 18px; grid-area: 1 / 1; }
+.coin-mark { grid-area: 1 / 1; width: 20px; height: 20px; }
+.icon-sun { color: var(--vl-accent); }
+.icon-moon { display: none; }
+@media (hover: hover) { .theme-coin:hover .coin-face { border-color: var(--vl-text-muted); } }
+.theme-coin { transition: transform .15s var(--ease); }
+.theme-coin:active { transform: scale(.94); }   /* a small press */
+.theme-coin:focus-visible { outline-offset: 4px; border-radius: 50%; }
+/* dark (chosen, or from the device) shows the moon */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .icon-sun  { display: none; }
+  :root:not([data-theme="light"]) .icon-moon { display: block; }
+}
+:root[data-theme="dark"] .icon-sun  { display: none; }
+:root[data-theme="dark"] .icon-moon { display: block; }
+
+/* the new theme spreads out in a circle from the coin (browsers with View Transitions) */
+/* The clip is set here in CSS (not started later from script), so the very first frame
+   already shows only the old page: no flash of the new theme before the wave. */
+::view-transition-old(root), ::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+:root.vt-coin::view-transition-new(root) { animation: vt-wave .6s cubic-bezier(.3, .6, .2, 1) both; }
+@keyframes vt-wave {
+  from { clip-path: circle(0px at var(--vt-x) var(--vt-y)); }
+  to   { clip-path: circle(var(--vt-r) at var(--vt-x) var(--vt-y)); }
+}
+/* colours change in one step during the switch (no half-faded borders inside the wave) */
+:root.vt-coin *, :root.vt-coin *::before, :root.vt-coin *::after { transition: none !important; }
+
+/* centred column: picture → headline → line → contact */
+/* Sizes follow both screen width and height, so it fits on any screen without scrolling. */
+.uc-main {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; padding-top: clamp(0px, 2vh, 16px); padding-bottom: clamp(24px, 6vh, 64px);
+}
+.uc-copy { display: flex; flex-direction: column; align-items: center; }
+.uc-art { display: block; width: clamp(140px, min(42vw, 30vh), 300px); margin-bottom: clamp(18px, 4vh, 44px); }
+.uc-art img { width: 100%; height: auto; }
+
+h1 {
+  font-weight: 700; font-size: clamp(34px, min(8.6vw, 8.2vh), 84px);
+  line-height: 1; letter-spacing: -.035em;
+}
+.lead { margin-top: clamp(10px, 2vh, 18px); font-size: clamp(15px, min(1.4vw, 2.2vh), 19px); color: var(--vl-text-muted); max-width: 30em; text-wrap: balance; }
+
+/* slow "work in progress" line */
+.progress {
+  position: relative; overflow: hidden;
+  width: min(220px, 60%); height: 2px; margin-top: clamp(18px, 3.6vh, 32px);
+  background: var(--vl-border); border-radius: 2px;
+}
+.progress span {
+  position: absolute; inset: 0 auto 0 0; width: 34%;
+  background: var(--vl-accent); border-radius: 2px;
+  animation: work 2.8s var(--ease) infinite;
+}
+@keyframes work { 0% { transform: translateX(-100%); } 100% { transform: translateX(300%); } }
+
+/* ── intro while the page loads (draft) ─────────────────
+   Covers the page (plain background, no dots) with the coin animation, then fades out
+   while the page's dots spread out from the coin.
+   Only with JavaScript (html.js); a safety fade after 8s in case the script never runs.
+   Coin colour: crimson on light, off-white on dark (never the bright red in the logo). */
+.intro { display: none; }
+.js .intro {
+  position: fixed; inset: 0; z-index: 100;
+  display: grid; place-items: center;
+  background: var(--vl-bg);
+  transition: opacity .6s var(--ease), visibility 0s linear .6s;
+  animation: intro-safety 0s linear 8s forwards;
+}
+.js .intro.is-done { opacity: 0; visibility: hidden; }
+@keyframes intro-safety { to { opacity: 0; visibility: hidden; } }
+.coin-loader {
+  position: relative; display: block; overflow: visible;
+  width: clamp(48px, 7vmin, 64px); height: clamp(48px, 7vmin, 64px);
+  color: var(--vl-crimson);
+  transition: transform .6s var(--ease);
+}
+.intro.is-done .coin-loader { transform: scale(.92); }
+.cl-coin {
+  fill: currentColor; stroke: currentColor; stroke-width: 5;   /* about 1.2px */
+  stroke-linejoin: round; stroke-linecap: butt;
+  stroke-dasharray: 100 101; stroke-dashoffset: 100;
+  fill-opacity: 0;
+  animation: cl-trace 3.6s cubic-bezier(.45, 0, .25, 1) infinite;
+}
+/* draw → fill → empty back to the line → the line runs on and wipes itself away
+   (same direction it was drawn). It ends empty, exactly where it starts: no jump. */
+@keyframes cl-trace {
+  0%   { stroke-dashoffset: 100;  stroke-opacity: 1; fill-opacity: 0; }
+  34%  { stroke-dashoffset: 0;    stroke-opacity: 1; fill-opacity: 0; }   /* outline traced */
+  46%  { stroke-dashoffset: 0;    stroke-opacity: 0; fill-opacity: 1; }   /* the exact coin */
+  64%  { stroke-dashoffset: 0;    stroke-opacity: 0; fill-opacity: 1; }   /* hold */
+  74%  { stroke-dashoffset: 0;    stroke-opacity: 1; fill-opacity: 0; }   /* back to the line */
+  100% { stroke-dashoffset: -100; stroke-opacity: 1; fill-opacity: 0; }   /* line wipes away */
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .coin-loader { color: var(--vl-ground-light); } }
+:root[data-theme="dark"] .coin-loader { color: var(--vl-ground-light); }
+
+/* contact pill: the email address with a round "go" mark */
+.contact-pill {
+  display: inline-flex; align-items: center; gap: 14px;
+  margin-top: clamp(18px, 3.6vh, 32px); padding: 6px 6px 6px 22px; max-width: 100%;
+  border: 1px solid var(--vl-border); border-radius: 999px;
+  background: var(--vl-surface); color: var(--vl-text);
+  font-weight: 500; font-size: 16px; line-height: 1;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--vl-ink) 5%, transparent);
+  transition: border-color .25s var(--ease), box-shadow .25s var(--ease), transform .25s var(--ease);
+}
+/* hover lift only with a mouse, so it never sticks after a tap on a phone */
+@media (hover: hover) {
+  .contact-pill:hover { border-color: var(--vl-border-strong); box-shadow: var(--shadow); transform: translateY(-1px); }
+  .contact-pill:hover .cp-go { background: var(--vl-accent-hover); }
+  .contact-pill:hover .cp-go svg { transform: rotate(45deg); }
+}
+.contact-pill:active { transform: scale(.98); }
+.contact-pill:focus-visible { border-radius: 999px; }
+.cp-go {
+  display: grid; place-items: center; width: 40px; height: 40px; flex: none;
+  border-radius: 50%; background: var(--vl-accent); color: var(--vl-on-accent);
+  transition: background-color .25s var(--ease);
+}
+.cp-go svg { width: 18px; height: 18px; transition: transform .3s var(--ease); }
+
+
+.uc-foot { font-size: 13px; color: var(--vl-text-muted); }
+.uc-foot-inner { display: flex; justify-content: space-between; gap: 8px 16px; flex-wrap: wrap; padding-top: clamp(12px, 2.4vh, 20px); padding-bottom: clamp(12px, 2.4vh, 20px); }
+.promise { font-weight: 600; color: var(--vl-text); }
+.tape {
+  height: 6px;
+  background: repeating-linear-gradient(-45deg, var(--vl-accent) 0 14px, var(--vl-bg) 14px 28px);
+  background-size: 39.6px 6px; /* 28 × √2 = one seamless stripe */
+  animation: march 1.6s linear infinite;
+}
+@keyframes march { to { background-position: 39.6px 0; } }
+
+/* ── buttons & links ─────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+  font: inherit; font-weight: 600; font-size: 16px; line-height: 1;
+  padding: 16px 26px; border-radius: 12px; border: 1px solid transparent;
+  cursor: pointer; white-space: nowrap;
+  transition: background-color .2s var(--ease), border-color .2s var(--ease), transform .2s var(--ease);
+}
+.btn:active { transform: translateY(1px); }
+.btn-primary { background: var(--vl-accent); color: var(--vl-on-accent); }
+.btn-primary:hover { background: var(--vl-accent-hover); }
+
+/* used by the 404 page */
+h2 { font-weight: 700; font-size: clamp(24px, 3vw, 32px); line-height: 1.15; letter-spacing: -.02em; }
+
+/* ── small screens ───────────────────────────────────── */
+@media (max-width: 600px) {
+  .logo img { height: 32px; }
+  .contact-pill { font-size: 15px; padding-left: 18px; gap: 12px; }
+}
+/* phones: keep the header on one line next to the coin */
+@media (max-width: 440px) {
+  .local-country { display: none; }
+  .theme-coin { width: 34px; height: 34px; }
+  .coin-face svg { width: 16px; height: 16px; }
+  .coin-mark { width: 18px; height: 18px; }
+}
+@media (max-width: 380px) {
+  .contact-pill { font-size: 14px; padding-left: 16px; gap: 10px; }
+  .cp-go { width: 36px; height: 36px; }
+}
+/* short landscape screens (phones on their side): picture beside the words */
+@media (orientation: landscape) and (max-height: 560px) {
+  .uc-main { flex-direction: row; gap: clamp(24px, 6vw, 64px); text-align: left; padding-bottom: 16px; }
+  .uc-copy { align-items: flex-start; }
+  .uc-art { width: clamp(140px, 48vh, 260px); margin: 0; flex: none; }
+  h1 { font-size: clamp(30px, 10vh, 56px); }
+  .lead { font-size: 15px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dot::after, .progress span, .tape, .cl-coin { animation: none; }
+  .progress span { width: 40%; }
+  .cl-coin { fill-opacity: 1; stroke: none; }
+  body.uc::before { transition: none; }
+}

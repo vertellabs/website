@@ -1,0 +1,5 @@
+# Crawling is allowed so that the noindex tag on each page can be read.
+# The pages themselves carry <meta name="robots" content="noindex, nofollow">.
+# Remove that tag from index.html and 404.html when the real site ships.
+User-agent: *
+Allow: /
