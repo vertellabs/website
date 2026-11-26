@@ -1,5 +1,5 @@
 /* Vertel Labs — under construction page: intro, Colombo clock and the light/dark coin.
-   The email pill is a plain mailto link (no form). */
+   Contact opens into WhatsApp (chat.vertellabs.com) and Email (a plain mailto link, no form). */
 (function () {
   'use strict';
 
@@ -25,6 +25,27 @@
     };
     if (document.readyState === 'complete') whenFull();
     else window.addEventListener('load', whenFull);
+  }
+
+  /* contact: the pill opens into WhatsApp + Email (the liquid motion is all in site.css) */
+  var ct = document.getElementById('contact');
+  var ctBtn = document.getElementById('contact-toggle');
+  if (ct && ctBtn) {
+    var setOpen = function (open) {
+      if (ct.classList.contains('is-open') && !open) ct.classList.add('was-open');   // runs the "sucked back in" drops
+      ct.classList.toggle('is-open', open);
+      ctBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      ctBtn.setAttribute('aria-label', open ? 'Close contact options' : 'Contact us');
+    };
+    setOpen(false);
+    ctBtn.addEventListener('click', function () { setOpen(!ct.classList.contains('is-open')); });
+    // close on Escape, or a tap/click anywhere else on the page
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && ct.classList.contains('is-open')) { setOpen(false); ctBtn.focus(); }
+    });
+    document.addEventListener('pointerdown', function (e) {
+      if (ct.classList.contains('is-open') && !e.target.closest('.ct-toggle, .ct-opt')) setOpen(false);
+    });
   }
 
   var year = document.getElementById('year');
@@ -73,19 +94,38 @@
     var face = coin.querySelector('.coin');
     var tossing = false;
 
-    var SPEED = 600;   // flip and page change run together, both done in 0.6s
+    var TURN = 850;      // one full turn of the coin (ms)
+    var TURN_AT = .45;   // the moment the Vertel side faces us (180°; see the keyframes below)
 
-    // the new theme spreads out in a circle from the coin
+    // The new theme pours out of the coin like liquid: a blob whose edge wobbles in three waves
+    // and calms to a clean circle as it reaches the corners. The frames are written as CSS
+    // @keyframes (vt-liquid, started by site.css), so the blob is in place from the first frame.
+    var liquidStyle = document.createElement('style');
+    document.head.appendChild(liquidStyle);
+    function liquidFrames(x, y, R) {
+      var N = 72, STEPS = 30, css = '@keyframes vt-liquid{';
+      for (var s = 0; s <= STEPS; s++) {
+        var t = s / STEPS;
+        var r = R * (1 - Math.pow(1 - t, 3));          // pours out fast, slows near the edges
+        var wob = .17 * Math.pow(1 - t, 1.3);         // wobbly at first, perfectly round at the end
+        var pts = [];
+        for (var i = 0; i < N; i++) {
+          var a = i / N * Math.PI * 2;
+          var k = 1 + wob * (.55 * Math.sin(3 * a + t * 9) + .3 * Math.sin(5 * a - t * 13 + 1) + .15 * Math.sin(8 * a + t * 17 + 2));
+          pts.push((x + Math.cos(a) * r * k).toFixed(1) + 'px ' + (y + Math.sin(a) * r * k).toFixed(1) + 'px');
+        }
+        css += (t * 100).toFixed(2) + '%{clip-path:polygon(' + pts.join(',') + ')}';
+      }
+      return css + '}';
+    }
+
     function revealTheme(next) {
       var update = function () { applyTheme(next); };
       if (!document.startViewTransition) { update(); return; }
       var r = coin.getBoundingClientRect();
       var x = r.left + r.width / 2, y = r.top + r.height / 2;
       var radius = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
-      // the wave itself is a CSS animation (vt-wave in site.css), so it is in place from the first frame
-      root.style.setProperty('--vt-x', x + 'px');
-      root.style.setProperty('--vt-y', y + 'px');
-      root.style.setProperty('--vt-r', Math.ceil(radius) + 'px');
+      liquidStyle.textContent = liquidFrames(x, y, Math.ceil(radius * 1.03));
       root.classList.add('vt-coin');
       var vt = document.startViewTransition(update);
       vt.finished.catch(function () {}).then(function () { root.classList.remove('vt-coin'); });
@@ -98,19 +138,22 @@
       var still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       if (still || !face.animate) { applyTheme(next); return; }
 
-      // One flip: the coin turns over once (the Vertel mark on the back passes by) and comes
-      // round to the new icon. The page starts changing at the same moment, so there's no wait.
+      // The flip: the coin turns over in place — the Vertel side passes by halfway — and comes
+      // round onto the new mode's side, going a touch past it and settling back. No lift, no shine.
       tossing = true;
-      applyIconOnly(from);                       // keep the current icon on the front until halfway
-      var flip = face.animate(
-        [{ transform: 'rotateY(0deg)' }, { transform: 'rotateY(360deg)' }],
-        { duration: SPEED, easing: 'cubic-bezier(.65, 0, .35, 1)' }   // symmetric: exactly 180° halfway
-      );
-      // halfway the back (Vertel mark) faces us, so the front can quietly change to the new icon
-      setTimeout(function () { applyIconOnly(next); }, SPEED / 2);
-      revealTheme(next);                         // pictures for both themes load with the page
-      flip.finished.then(function () { clearIconOnly(); tossing = false; })
-        .catch(function () { clearIconOnly(); tossing = false; });
+      applyIconOnly(from);                       // keep the current icon on the front until it is hidden
+      var flip = face.animate([
+        { offset: 0,   transform: 'rotateY(0deg)',   easing: 'cubic-bezier(.55, 0, 1, 1)' },   // gathers speed
+        { offset: .45, transform: 'rotateY(180deg)', easing: 'cubic-bezier(.3, .5, .3, 1)' },  // Vertel side: same speed on, then slows
+        { offset: .86, transform: 'rotateY(368deg)', easing: 'cubic-bezier(.4, 0, .4, 1)' },   // a touch past
+        { offset: 1,   transform: 'rotateY(360deg)' }                                          // settles
+      ], { duration: TURN });
+
+      // Vertel side up: the front is out of sight, so it changes to the new icon now,
+      // and the new theme pours out of the coin
+      setTimeout(function () { applyIconOnly(next); revealTheme(next); }, TURN * TURN_AT);
+      var done = function () { clearIconOnly(); tossing = false; };
+      flip.finished.then(done, done);
     });
 
     // show the next theme's icon on the coin before the page itself changes

@@ -109,19 +109,32 @@ body.uc::before {
   cursor: pointer; perspective: 240px;
 }
 .coin { position: absolute; inset: 0; display: block; transform-style: preserve-3d; }
+/* two faces 3px apart, with an edge between them, so it reads as a real coin when it turns */
+/* One quiet ring, not a hard outline: the old double rim (a dark line plus an inner one)
+   read as a black stroke drawn round the sun on the pale page. */
 .coin-face {
-  position: absolute; inset: 0; display: grid; place-items: center;
-  border-radius: 50%; border: 1px solid var(--vl-border-strong); background: var(--vl-surface);
+  position: absolute; inset: 0; display: grid; place-items: center; overflow: hidden;
+  border-radius: 50%; border: 1px solid var(--vl-border); background: var(--vl-surface);
   backface-visibility: hidden; -webkit-backface-visibility: hidden;
-  box-shadow: inset 0 0 0 3px var(--vl-surface), inset 0 0 0 4px var(--vl-border); /* coin rim */
-  transition: border-color .2s var(--ease);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--vl-ink) 5%, transparent);   /* it sits on the page, not cut into it */
+  transition: border-color .2s var(--ease), box-shadow .2s var(--ease);
 }
-.coin-back { transform: rotateY(180deg); }
+.coin-front { transform: translateZ(1.5px); }
+.coin-back  { transform: rotateY(180deg) translateZ(1.5px); }
+.coin-edge {
+  position: absolute; top: 3px; bottom: 3px; left: 50%; width: 3px; margin-left: -1.5px;
+  border-radius: 2px; background: var(--vl-border); transform: rotateY(90deg);
+}
 .coin-face svg { width: 18px; height: 18px; grid-area: 1 / 1; }
 .coin-mark { grid-area: 1 / 1; width: 20px; height: 20px; }
 .icon-sun { color: var(--vl-accent); }
 .icon-moon { display: none; }
-@media (hover: hover) { .theme-coin:hover .coin-face { border-color: var(--vl-text-muted); } }
+@media (hover: hover) {
+  .theme-coin:hover .coin-face {
+    border-color: var(--vl-border-strong);
+    box-shadow: 0 2px 6px color-mix(in srgb, var(--vl-ink) 9%, transparent);
+  }
+}
 .theme-coin { transition: transform .15s var(--ease); }
 .theme-coin:active { transform: scale(.94); }   /* a small press */
 .theme-coin:focus-visible { outline-offset: 4px; border-radius: 50%; }
@@ -133,15 +146,12 @@ body.uc::before {
 :root[data-theme="dark"] .icon-sun  { display: none; }
 :root[data-theme="dark"] .icon-moon { display: block; }
 
-/* the new theme spreads out in a circle from the coin (browsers with View Transitions) */
-/* The clip is set here in CSS (not started later from script), so the very first frame
-   already shows only the old page: no flash of the new theme before the wave. */
+/* the new theme pours out of the coin like liquid: a wobbly blob that grows and settles round
+   (browsers with View Transitions). site.js writes the blob's frames into @keyframes vt-liquid
+   just before the switch; the animation itself is set here in CSS (not started later from
+   script), so the very first frame already shows only the old page: no flash of the new theme. */
 ::view-transition-old(root), ::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
-:root.vt-coin::view-transition-new(root) { animation: vt-wave .6s cubic-bezier(.3, .6, .2, 1) both; }
-@keyframes vt-wave {
-  from { clip-path: circle(0px at var(--vt-x) var(--vt-y)); }
-  to   { clip-path: circle(var(--vt-r) at var(--vt-x) var(--vt-y)); }
-}
+:root.vt-coin::view-transition-new(root) { animation: vt-liquid .9s linear both; }
 /* colours change in one step during the switch (no half-faded borders inside the wave) */
 :root.vt-coin *, :root.vt-coin *::before, :root.vt-coin *::after { transition: none !important; }
 
@@ -216,30 +226,206 @@ h1 {
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .coin-loader { color: var(--vl-ground-light); } }
 :root[data-theme="dark"] .coin-loader { color: var(--vl-ground-light); }
 
-/* contact pill: the email address with a round "go" mark */
-.contact-pill {
-  display: inline-flex; align-items: center; gap: 14px;
-  margin-top: clamp(18px, 3.6vh, 32px); padding: 6px 6px 6px 22px; max-width: 100%;
-  border: 1px solid var(--vl-border); border-radius: 999px;
-  background: var(--vl-surface); color: var(--vl-text);
-  font-weight: 500; font-size: 16px; line-height: 1;
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--vl-ink) 5%, transparent);
-  transition: border-color .25s var(--ease), box-shadow .25s var(--ease), transform .25s var(--ease);
+/* ── contact: one pill that splits like liquid into WhatsApp and Email ──────────
+   Two layers in the same place:
+   · .ct-goo   — plain shapes only, melted together by the #vl-goo SVG filter (blur → hard edge),
+                 so when they pull apart a neck of "liquid" stretches between them;
+   · on top    — the real button and links, sharp, moving with their shapes.
+   Open = .ct.is-open (set by site.js). Without JavaScript the two links simply show. */
+.ct {
+  /* sizes (wide screens: WhatsApp | chevron | Email side by side) */
+  --main-w: 148px; --main-h: 52px;      /* the closed "Contact" pill */
+  --knob: 48px;                         /* the round chevron it shrinks into */
+  --card-w: 236px; --card-h: 60px;      /* each option */
+  --gap: 6px;                           /* space between pieces: small, so the liquid neck stays */
+  --ox: 0px;                            /* shifts the open set sideways (used when the column is left-aligned) */
+  --ox-abs: 0px;                        /* the same shift without its sign, so the liquid box stays centred */
+  /* where each piece sits when open (from the centre of the closed pill) */
+  --ax: calc(var(--ox) - var(--card-w) / 2 - var(--knob) / 2 - var(--gap)); --ay: 0px;
+  --bx: calc(var(--ox) + var(--card-w) / 2 + var(--knob) / 2 + var(--gap)); --by: 0px;
+  --kx: var(--ox); --ky: 0px;
+  /* motion */
+  --spring: cubic-bezier(.3, 1.35, .45, 1);   /* overshoots a little and settles */
+  --pull: cubic-bezier(.55, 0, .3, 1);        /* drawn back in */
+  --fling: cubic-bezier(.2, 1.2, .3, 1);      /* thrown out, settles with a small overshoot */
+  --fling-soft: cubic-bezier(.35, 1.15, .4, 1); /* the same, but leaves more slowly so the neck can stretch */
+  --jelly: cubic-bezier(.3, 1.7, .45, 1);     /* wobbles past its size and back, like a drop */
+  --suck: cubic-bezier(.65, 0, .25, 1);       /* slow start, then pulled in fast */
+  --settle: cubic-bezier(.45, 0, .15, 1);     /* smooth, no bounce */
+
+  position: relative; flex: none;
+  width: var(--main-w); height: var(--main-h);
+  margin-top: clamp(18px, 3.6vh, 32px);
 }
-/* hover lift only with a mouse, so it never sticks after a tap on a phone */
+
+/* the liquid layer: a box just bigger than the open set, so the blur has room on every side
+   (no bigger, or it would stick out past a phone's screen) */
+.ct-goo {
+  position: absolute; pointer-events: none;
+  inset: -50px calc((var(--main-w) - var(--card-w) * 2 - var(--knob) - var(--gap) * 2) / 2 - 24px);
+  filter: url(#vl-goo) drop-shadow(0 1px 1px color-mix(in srgb, var(--vl-ink) 5%, transparent))
+                       drop-shadow(0 14px 22px color-mix(in srgb, var(--vl-ink) 9%, transparent));
+}
+.goo-rim { flood-color: var(--vl-border); }
+.defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+
+/* every piece is placed from the centre */
+.ct-shape, .ct-toggle, .ct-opt { position: absolute; left: 50%; top: 50%; }
+.ct-shape { background: var(--vl-surface); border-radius: 999px; }
+
+/* closed: everything sits inside the "Contact" pill.
+   Closing: the options shrink to drops, get sucked back in, and the pill swells up after
+   swallowing them (wobbling past its size and settling). */
+.ct-shape.p-main, .ct-toggle {
+  width: var(--main-w); height: var(--main-h);
+  translate: -50% -50%;
+  transition: width .85s var(--jelly) .3s, height .7s var(--jelly) .34s, translate .6s var(--fling) .2s;
+}
+.ct-shape.p-a, .ct-shape.p-b {
+  width: 40px; height: 40px; translate: -50% -50%; border-radius: var(--card-r, 999px);
+  transition: width .42s var(--pull), height .5s var(--pull), translate .55s var(--suck) .1s, scale .35s var(--ease);
+}
+/* corner drops (phones only, see below): empty unless the tile layout gives them a size */
+.ct-shape.p-ai, .ct-shape.p-bi { width: 0; height: 0; translate: -50% -50%; border-radius: 50%;
+  transition: width .3s var(--pull), height .3s var(--pull), translate .55s var(--suck) .1s, scale .3s var(--ease); }
+/* trailing drops: they ride in the neck behind each option and melt away, so the liquid stretches */
+.ct-shape.p-a2, .ct-shape.p-b2 { width: 0; height: 0; translate: -50% -50%; }
+.ct.is-open .ct-shape.p-a2 { animation: ct-trail-out .95s var(--fling) both; --tx: var(--ax); --ty: var(--ay); }
+.ct.is-open .ct-shape.p-b2 { animation: ct-trail-out .95s var(--fling) .05s both; --tx: var(--bx); --ty: var(--by); }
+.ct.was-open:not(.is-open) .ct-shape.p-a2 { animation: ct-trail-in .8s var(--suck) both; --tx: var(--ax); --ty: var(--ay); }
+.ct.was-open:not(.is-open) .ct-shape.p-b2 { animation: ct-trail-in .8s var(--suck) .04s both; --tx: var(--bx); --ty: var(--by); }
+@keyframes ct-trail-out {
+  0%   { width: 38px; height: 38px; translate: -50% -50%; }
+  22%  { width: 36px; height: 36px; translate: calc(var(--tx) * .58 - 50%) calc(var(--ty) * .58 - 50%); }
+  55%  { width: 26px; height: 26px; translate: calc(var(--tx) * .5 - 50%)  calc(var(--ty) * .5 - 50%); }
+  100% { width: 0;    height: 0;    translate: calc(var(--tx) * .48 - 50%) calc(var(--ty) * .48 - 50%); }
+}
+@keyframes ct-trail-in {
+  0%   { width: 0;    height: 0;    translate: calc(var(--tx) * .5 - 50%)  calc(var(--ty) * .5 - 50%); }
+  40%  { width: 28px; height: 28px; translate: calc(var(--tx) * .4 - 50%)  calc(var(--ty) * .4 - 50%); }
+  100% { width: 30px; height: 30px; translate: -50% -50%; }
+}
+
+/* the button: "Contact" + the round mark; the mark turns + into × */
+.ct-toggle {
+  display: block; padding: 0; border: 0; background: none; cursor: pointer;
+  font: inherit; font-weight: 500; font-size: 16px; line-height: 1; color: var(--vl-text);
+  border-radius: 999px;
+}
+.ct-label {
+  position: absolute; left: 22px; top: 50%; translate: 0 -50%; white-space: nowrap;
+  max-width: calc(100% - 64px); overflow: hidden;   /* the word never pokes out when the pill shrinks */
+  transition: opacity .35s var(--ease) .55s;
+}
+/* the round mark is placed from the pill's centre, so it glides to the middle in step with the
+   shrinking pill and is never clipped */
+.ct-x {
+  position: absolute; top: 50%; left: 50%;
+  translate: calc(var(--main-w) / 2 - var(--main-h) / 2 - 50%) -50%;
+  display: grid; place-items: center; width: 40px; height: 40px;
+  border-radius: 50%; background: var(--vl-accent); color: var(--vl-on-accent);
+  transition: translate .85s var(--jelly) .3s, rotate .6s var(--spring) .2s, background-color .25s var(--ease);
+}
+.ct-x svg { width: 19px; height: 19px; transition: translate .25s var(--ease); }
+/* while it is closed the chevron dips every few seconds — a quiet "press me" */
+.ct:not(.is-open) .ct-x svg { animation: ct-hint 4s var(--ease) 1.6s infinite; }
+@keyframes ct-hint {
+  0%, 72%, 100% { translate: 0 0; }
+  80%  { translate: 0 2.5px; }
+  88%  { translate: 0 0; }
+  94%  { translate: 0 1.2px; }
+}
 @media (hover: hover) {
-  .contact-pill:hover { border-color: var(--vl-border-strong); box-shadow: var(--shadow); transform: translateY(-1px); }
-  .contact-pill:hover .cp-go { background: var(--vl-accent-hover); }
-  .contact-pill:hover .cp-go svg { transform: rotate(45deg); }
+  .ct-toggle:hover .ct-x { background: var(--vl-accent-hover); }
+  .ct:not(.is-open) .ct-toggle:hover .ct-x svg { animation: none; translate: 0 2px; }
 }
-.contact-pill:active { transform: scale(.98); }
-.contact-pill:focus-visible { border-radius: 999px; }
-.cp-go {
+.ct-toggle:active .ct-x { scale: .94; }
+
+/* the two options: each grows exactly like its blob (same size, same timing) and clips what is
+   inside, so the words are only ever seen inside the liquid — never floating outside it */
+.ct-opt {
+  display: block; overflow: hidden;
+  width: 40px; height: 40px; border-radius: var(--card-r, 999px);
+  color: var(--vl-text); text-align: left;
+  /* cut a hair inside the blob: the melted liquid is a touch rounder than this box, so without
+     it a corner icon or a word can look like it is sitting on the edge, or escaping it */
+  clip-path: inset(3px round var(--card-r, 999px));
+  translate: -50% -50%; opacity: 0; visibility: hidden; pointer-events: none;
+  transition: width .42s var(--pull), height .5s var(--pull), translate .55s var(--suck) .1s,
+              opacity .14s var(--ease), visibility 0s linear .65s;
+}
+/* what's inside stays full size and centred while the option grows around it */
+.ct-in {
+  position: absolute; left: 50%; top: 50%; translate: -50% -50%;
+  width: var(--card-w); height: var(--card-h);
+  display: flex; align-items: center; gap: 12px; padding: 0 18px 0 10px;
+}
+/* the right option mirrors the left one: each icon sits on its own outer side, so the pair
+   opens outwards from the chevron instead of both leaning the same way */
+.ct-opt.p-b .ct-in { flex-direction: row-reverse; padding: 0 10px 0 18px; }
+.ct-opt.p-b .ct-words { align-items: flex-end; text-align: right; }
+.ct-ico {
   display: grid; place-items: center; width: 40px; height: 40px; flex: none;
   border-radius: 50%; background: var(--vl-accent); color: var(--vl-on-accent);
-  transition: background-color .25s var(--ease);
+  transition: background-color .25s var(--ease), scale .3s var(--ease);
 }
-.cp-go svg { width: 18px; height: 18px; transition: transform .3s var(--ease); }
+.ct-ico svg { width: 19px; height: 19px; }
+.ct-ico-wa svg { width: 20px; height: 20px; }
+.ct-words { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ct-name { font-weight: 600; font-size: 15px; line-height: 1.15; }
+.ct-addr { font-size: 12.5px; line-height: 1.2; color: var(--vl-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ct-opt:focus-visible { border-radius: 999px; outline-offset: 2px; }
+@media (hover: hover) {
+  /* Hovering swells the whole blob a little — the corner drop with it — and the icon only
+     deepens in colour. No tilt and no spring: it moves the same calm way as everything else. */
+  .ct-opt:hover .ct-ico { background: var(--vl-accent-hover); }
+  .ct:has(.p-a:hover) :is(.ct-shape.p-a, .ct-shape.p-ai),
+  .ct:has(.p-b:hover) :is(.ct-shape.p-b, .ct-shape.p-bi) { scale: 1.03; }
+}
+
+/* ── open ──
+   The options leave as round drops while the pill is still full (so a neck of liquid stretches
+   between them), then spread into pills; the pill only then shrinks into the × and wobbles. */
+:is(.ct.is-open, :root:not(.js) .ct) .ct-shape.p-main,
+:is(.ct.is-open, :root:not(.js) .ct) .ct-toggle {
+  width: var(--knob); height: var(--knob);
+  translate: calc(var(--kx) - 50%) calc(var(--ky) - 50%);
+  /* it shrinks smoothly (a bounce here would squeeze it smaller than the round mark inside it)… */
+  transition: width .5s var(--settle) .05s, height .5s var(--settle) .05s, translate .6s var(--fling) .05s;
+  /* …then, once it's the ×, it wobbles like a drop that just landed. The button (not the
+     turned mark) wobbles with it, so the mark always stays inside the drop. */
+  animation: ct-boing .8s var(--ease) .6s;
+}
+@keyframes ct-boing {
+  0%   { scale: 1 1; }
+  20%  { scale: 1.16 .86; }
+  40%  { scale: .9 1.1; }
+  60%  { scale: 1.05 .96; }
+  80%  { scale: .985 1.015; }
+  100% { scale: 1 1; }
+}
+:is(.ct.is-open, :root:not(.js) .ct) .ct-label { opacity: 0; transition: opacity .12s var(--ease); }
+:is(.ct.is-open, :root:not(.js) .ct) .ct-x {
+  translate: -50% -50%; rotate: 180deg;
+  transition: translate .5s var(--settle) .05s, rotate .7s var(--spring) .05s, background-color .25s var(--ease);
+}
+:is(.ct.is-open, :root:not(.js) .ct) .ct-shape.p-a,
+:is(.ct.is-open, :root:not(.js) .ct) .ct-shape.p-b {
+  width: var(--card-w); height: var(--card-h);
+  transition: translate .95s var(--fling-soft), width 1s var(--jelly) .16s, height .8s var(--jelly) .12s, scale .35s var(--ease);
+}
+:is(.ct.is-open, :root:not(.js) .ct) .ct-shape.p-a { translate: calc(var(--ax) - 50%) calc(var(--ay) - 50%); }
+:is(.ct.is-open, :root:not(.js) .ct) .ct-shape.p-b { translate: calc(var(--bx) - 50%) calc(var(--by) - 50%); transition-delay: .05s, .21s, .17s, 0s; }
+:is(.ct.is-open, :root:not(.js) .ct) .ct-opt {
+  width: var(--card-w); height: var(--card-h);
+  opacity: 1; visibility: visible; pointer-events: auto;
+  transition: translate .95s var(--fling-soft), width 1s var(--jelly) .16s, height .8s var(--jelly) .12s,
+              opacity .3s var(--ease) .42s, visibility 0s;
+}
+:is(.ct.is-open, :root:not(.js) .ct) .ct-opt.p-a { translate: calc(var(--ax) - 50%) calc(var(--ay) - 50%); }
+:is(.ct.is-open, :root:not(.js) .ct) .ct-opt.p-b { translate: calc(var(--bx) - 50%) calc(var(--by) - 50%); transition-delay: .05s, .21s, .17s, .47s, 0s; }
+/* without JavaScript the × does nothing, so it isn't shown */
+:root:not(.js) .ct-toggle, :root:not(.js) .ct-shape.p-main { display: none; }
 
 
 .uc-foot { font-size: 13px; color: var(--vl-text-muted); }
@@ -271,7 +457,94 @@ h2 { font-weight: 700; font-size: clamp(24px, 3vw, 32px); line-height: 1.15; let
 /* ── small screens ───────────────────────────────────── */
 @media (max-width: 600px) {
   .logo img { height: 32px; }
-  .contact-pill { font-size: 15px; padding-left: 18px; gap: 12px; }
+}
+/* narrow screens and phones on their side: two rounded tiles side by side
+   (icon, name, address stacked), with the chevron hanging under the join like a drip */
+@media (max-width: 599px), (orientation: landscape) and (max-height: 560px) {
+  .ct {
+    --gap: 20px; --knob: 42px; --card-h: 84px; --card-r: 22px;
+    --card-w: calc((min(340px, 100vw - 40px) - var(--gap)) / 2);
+    --ax: calc(var(--ox) - var(--card-w) / 2 - var(--gap) / 2); --ay: 0px;
+    --bx: calc(var(--ox) + var(--card-w) / 2 + var(--gap) / 2); --by: 0px;
+    --kx: var(--ox); --ky: calc(var(--card-h) / 2 + 6px);
+  }
+  /* The same inset on both sides, so this box keeps the pill's centre: the shapes inside are
+     placed from its middle, and an uneven box would slide them away from their words.
+     Top and bottom reach just past the tiles and the chevron (plus room for the blur) — any more
+     and this invisible box would make a short page scroll. */
+  .ct-goo {
+    --goo-x: calc(var(--main-w) / 2 - var(--card-w) - var(--gap) / 2 - var(--ox-abs) - 18px);
+    --goo-v: max(calc(var(--card-h) / 2 - var(--main-h) / 2 + 28px),
+                 calc(var(--ky) + var(--knob) / 2 - var(--main-h) / 2 + 28px));
+    inset: calc(-1 * var(--goo-v)) var(--goo-x);
+  }
+  .ct-opt:focus-visible { border-radius: var(--card-r); }
+  /* The icon tucks into the tile's outer top corner — the left tile's to the left, the right
+     tile's to the right — and the words sit underneath on the same side. The pair reads as one
+     mirrored set, and with nothing stacked down the middle each tile can be shorter. */
+  /* The icon sits ON the tile's outer top corner, half out of it, and a drop of liquid wraps
+     round it — the left tile's at top-left, the right tile's at top-right. The words sit in the
+     middle of the tile. The option box lets the icon past its edge (clip a little outside). */
+  .ct-opt { overflow: visible; clip-path: inset(-18px round var(--card-r)); }
+  .ct-in, .ct-opt.p-b .ct-in {
+    flex-direction: column; align-items: center; justify-content: center;
+    gap: 0; padding: 10px 8px 6px;
+  }
+  .ct-ico { position: absolute; left: -6px; top: -7px; width: 34px; height: 34px; }
+  .ct-opt.p-b .ct-ico { left: auto; right: -6px; }
+  .ct-ico svg { width: 17px; height: 17px; }
+  .ct-ico-wa svg { width: 18px; height: 18px; }
+  .ct-words, .ct-opt.p-b .ct-words { width: 100%; gap: 3px; align-items: center; text-align: center; }
+  /* the drop of liquid round each corner icon (same centre as the icon) */
+  .ct {
+    --aix: calc(var(--ax) - var(--card-w) / 2 + 11px); --aiy: calc(var(--ay) - var(--card-h) / 2 + 10px);
+    --bix: calc(var(--bx) + var(--card-w) / 2 - 11px); --biy: var(--aiy);
+  }
+  .ct.is-open .ct-shape.p-ai, .ct.is-open .ct-shape.p-bi {
+    width: 46px; height: 46px;
+    transition: width .6s var(--jelly) .38s, height .6s var(--jelly) .38s, translate .95s var(--fling-soft),
+                scale .3s var(--ease);
+  }
+  .ct.is-open .ct-shape.p-ai { translate: calc(var(--aix) - 50%) calc(var(--aiy) - 50%); }
+  .ct.is-open .ct-shape.p-bi { translate: calc(var(--bix) - 50%) calc(var(--biy) - 50%); transition-delay: .43s, .43s, .05s, 0s; }
+  .ct-name { font-size: 15px; }
+  .ct-addr { font-size: clamp(10px, 3.1vw, 12.5px); max-width: 100%; }
+  /* the tiles cover the progress line, so it steps aside */
+  .progress { transition: opacity .3s var(--ease); }
+  .uc-copy:has(.ct.is-open) .progress { opacity: 0; }
+}
+/* phones held upright: the pill splits downward — the chevron stays where "Contact" was and the
+   two tiles drop out below it, side by side, joined to it by liquid */
+@media (max-width: 599px) {
+  .ct {
+    --card-h: 86px; --gap-y: -7px;   /* the chevron dips onto the tiles' inner corners */
+    --ay: calc(var(--knob) / 2 + var(--gap-y) + var(--card-h) / 2); --by: var(--ay);
+    --kx: var(--ox); --ky: 0px;
+    transition: margin-bottom .8s var(--suck) .15s;
+  }
+  .ct-goo {   /* stays centred on the pill, and reaches just past the tiles below */
+    --goo-v: calc(var(--ay) + var(--card-h) / 2 - var(--main-h) / 2 + 28px);
+    inset: calc(-1 * var(--goo-v)) var(--goo-x);
+  }
+  /* the tiles are below now, so the progress line stays */
+  .uc-copy:has(.ct.is-open) .progress { opacity: 1; }
+}
+/* shorter phones: make room for the tiles by easing the page up a little as they drop */
+@media (max-width: 599px) and (max-height: 719px) {
+  .ct { --card-h: 82px; }
+  .ct.is-open { margin-bottom: 54px; transition: margin-bottom .8s var(--fling); }
+}
+/* very short screens: slimmer tiles, so the open set still fits without scrolling */
+@media (orientation: landscape) and (max-height: 480px) {
+  .ct { --card-h: 74px; }
+  .ct-ico { width: 30px; height: 30px; }
+  .ct-ico svg, .ct-ico-wa svg { width: 16px; height: 16px; }
+  .ct-name { font-size: 14px; }
+  .ct-addr { font-size: clamp(10px, 3.1vw, 11.5px); }
+}
+/* the narrowest phones: less side padding in the tiles, so the whole email address still fits */
+@media (max-width: 360px) {
+  .ct-in, .ct-opt.p-b .ct-in { padding: 10px 6px 6px; }
 }
 /* phones: keep the header on one line next to the coin */
 @media (max-width: 440px) {
@@ -279,10 +552,6 @@ h2 { font-weight: 700; font-size: clamp(24px, 3vw, 32px); line-height: 1.15; let
   .theme-coin { width: 34px; height: 34px; }
   .coin-face svg { width: 16px; height: 16px; }
   .coin-mark { width: 18px; height: 18px; }
-}
-@media (max-width: 380px) {
-  .contact-pill { font-size: 14px; padding-left: 16px; gap: 10px; }
-  .cp-go { width: 36px; height: 36px; }
 }
 /* short landscape screens (phones on their side): picture beside the words */
 @media (orientation: landscape) and (max-height: 560px) {
@@ -292,9 +561,16 @@ h2 { font-weight: 700; font-size: clamp(24px, 3vw, 32px); line-height: 1.15; let
   h1 { font-size: clamp(30px, 10vh, 56px); }
   .lead { font-size: 15px; }
 }
+/* …and when such a screen is wide enough, the tiles line up with the words' left edge and are
+   wide enough for the whole email address. Narrower short screens keep the centred tiles above. */
+@media (orientation: landscape) and (max-height: 560px) and (min-width: 700px) {
+  .ct { --card-w: 166px; --ox: calc(var(--card-w) + var(--gap) / 2 - var(--main-w) / 2); --ox-abs: var(--ox); }
+}
 @media (prefers-reduced-motion: reduce) {
   .dot::after, .progress span, .tape, .cl-coin { animation: none; }
   .progress span { width: 40%; }
   .cl-coin { fill-opacity: 1; stroke: none; }
   body.uc::before { transition: none; }
+  /* contact: no travelling, the options just fade in where they belong */
+  .ct *, .ct-shape { transition-duration: .01s !important; transition-delay: 0s !important; animation: none !important; }
 }
