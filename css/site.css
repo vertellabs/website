@@ -271,7 +271,11 @@ h1 {
 
 /* every piece is placed from the centre */
 .ct-shape, .ct-toggle, .ct-opt { position: absolute; left: 50%; top: 50%; }
-.ct-shape { background: var(--vl-surface); border-radius: 999px; }
+.ct-shape { background: var(--vl-surface); border-radius: 999px; translate: -50% -50%; box-sizing: content-box; padding: 0; }
+/* The liquid shapes move with left/top and change size with width/height/padding - never with an
+   animated translate or scale. Phones hand translate/scale animations to the graphics chip, which
+   skips the liquid filter until the motion stops: the rim and the joins then pop in late. Layout
+   changes make the browser redraw through the filter on every frame, so the liquid stays whole. */
 
 /* closed: everything sits inside the "Contact" pill.
    Closing: the options shrink to drops, get sucked back in, and the pill swells up after
@@ -281,29 +285,34 @@ h1 {
   translate: -50% -50%;
   transition: width .85s var(--jelly) .3s, height .7s var(--jelly) .34s, translate .6s var(--fling) .2s;
 }
+.ct-shape.p-main {
+  transition: width .85s var(--jelly) .3s, height .7s var(--jelly) .34s, left .6s var(--fling) .2s, top .6s var(--fling) .2s;
+}
 .ct-shape.p-a, .ct-shape.p-b {
-  width: 40px; height: 40px; translate: -50% -50%; border-radius: var(--card-r, 999px);
-  transition: width .42s var(--pull), height .5s var(--pull), translate .55s var(--suck) .1s, scale .35s var(--ease);
+  width: 40px; height: 40px; border-radius: var(--card-r, 999px);
+  transition: width .42s var(--pull), height .5s var(--pull), left .55s var(--suck) .1s, top .55s var(--suck) .1s,
+              padding .35s var(--ease);
 }
 /* corner drops (phones only, see below): empty unless the tile layout gives them a size */
-.ct-shape.p-ai, .ct-shape.p-bi { width: 0; height: 0; translate: -50% -50%; border-radius: 50%;
-  transition: width .3s var(--pull), height .3s var(--pull), translate .55s var(--suck) .1s, scale .3s var(--ease); }
+.ct-shape.p-ai, .ct-shape.p-bi { width: 0; height: 0; border-radius: 50%;
+  transition: width .3s var(--pull), height .3s var(--pull), left .55s var(--suck) .1s, top .55s var(--suck) .1s,
+              padding .3s var(--ease); }
 /* trailing drops: they ride in the neck behind each option and melt away, so the liquid stretches */
-.ct-shape.p-a2, .ct-shape.p-b2 { width: 0; height: 0; translate: -50% -50%; }
+.ct-shape.p-a2, .ct-shape.p-b2 { width: 0; height: 0; }
 .ct.is-open .ct-shape.p-a2 { animation: ct-trail-out .95s var(--fling) both; --tx: var(--ax); --ty: var(--ay); }
 .ct.is-open .ct-shape.p-b2 { animation: ct-trail-out .95s var(--fling) .05s both; --tx: var(--bx); --ty: var(--by); }
 .ct.was-open:not(.is-open) .ct-shape.p-a2 { animation: ct-trail-in .8s var(--suck) both; --tx: var(--ax); --ty: var(--ay); }
 .ct.was-open:not(.is-open) .ct-shape.p-b2 { animation: ct-trail-in .8s var(--suck) .04s both; --tx: var(--bx); --ty: var(--by); }
 @keyframes ct-trail-out {
-  0%   { width: 38px; height: 38px; translate: -50% -50%; }
-  22%  { width: 36px; height: 36px; translate: calc(var(--tx) * .58 - 50%) calc(var(--ty) * .58 - 50%); }
-  55%  { width: 26px; height: 26px; translate: calc(var(--tx) * .5 - 50%)  calc(var(--ty) * .5 - 50%); }
-  100% { width: 0;    height: 0;    translate: calc(var(--tx) * .48 - 50%) calc(var(--ty) * .48 - 50%); }
+  0%   { width: 38px; height: 38px; left: 50%; top: 50%; }
+  22%  { width: 36px; height: 36px; left: calc(50% + var(--tx) * .58); top: calc(50% + var(--ty) * .58); }
+  55%  { width: 26px; height: 26px; left: calc(50% + var(--tx) * .5);  top: calc(50% + var(--ty) * .5); }
+  100% { width: 0;    height: 0;    left: calc(50% + var(--tx) * .48); top: calc(50% + var(--ty) * .48); }
 }
 @keyframes ct-trail-in {
-  0%   { width: 0;    height: 0;    translate: calc(var(--tx) * .5 - 50%)  calc(var(--ty) * .5 - 50%); }
-  40%  { width: 28px; height: 28px; translate: calc(var(--tx) * .4 - 50%)  calc(var(--ty) * .4 - 50%); }
-  100% { width: 30px; height: 30px; translate: -50% -50%; }
+  0%   { width: 0;    height: 0;    left: calc(50% + var(--tx) * .5);  top: calc(50% + var(--ty) * .5); }
+  40%  { width: 28px; height: 28px; left: calc(50% + var(--tx) * .4);  top: calc(50% + var(--ty) * .4); }
+  100% { width: 30px; height: 30px; left: 50%; top: 50%; }
 }
 
 /* the button: "Contact" + the round mark; the mark turns + into × */
@@ -379,8 +388,10 @@ h1 {
   /* Hovering swells the whole blob a little — the corner drop with it — and the icon only
      deepens in colour. No tilt and no spring: it moves the same calm way as everything else. */
   .ct-opt:hover .ct-ico { background: var(--vl-accent-hover); }
-  .ct:has(.p-a:hover) :is(.ct-shape.p-a, .ct-shape.p-ai),
-  .ct:has(.p-b:hover) :is(.ct-shape.p-b, .ct-shape.p-bi) { scale: 1.03; }
+  .ct:has(.p-a:hover) .ct-shape.p-a, .ct:has(.p-b:hover) .ct-shape.p-b {
+    padding: calc(var(--card-h) * .015) calc(var(--card-w) * .015);
+  }
+  .ct:has(.p-a:hover) .ct-shape.p-ai, .ct:has(.p-b:hover) .ct-shape.p-bi { padding: .7px; }
 }
 
 /* ── open ──
@@ -404,6 +415,20 @@ h1 {
   80%  { scale: .985 1.015; }
   100% { scale: 1 1; }
 }
+:is(.ct.is-open, :root:not(.js) .ct) .ct-shape.p-main {
+  translate: -50% -50%; left: calc(50% + var(--kx)); top: calc(50% + var(--ky));
+  transition: width .5s var(--settle) .05s, height .5s var(--settle) .05s, left .6s var(--fling) .05s, top .6s var(--fling) .05s;
+  animation: ct-boing-drop .8s var(--ease) .6s;
+}
+/* the same wobble as ct-boing, made with the drop's size so the liquid filter follows it */
+@keyframes ct-boing-drop {
+  0%   { width: var(--knob);               height: var(--knob); }
+  20%  { width: calc(var(--knob) * 1.16);  height: calc(var(--knob) * .86); }
+  40%  { width: calc(var(--knob) * .9);    height: calc(var(--knob) * 1.1); }
+  60%  { width: calc(var(--knob) * 1.05);  height: calc(var(--knob) * .96); }
+  80%  { width: calc(var(--knob) * .985);  height: calc(var(--knob) * 1.015); }
+  100% { width: var(--knob);               height: var(--knob); }
+}
 :is(.ct.is-open, :root:not(.js) .ct) .ct-label { opacity: 0; transition: opacity .12s var(--ease); }
 :is(.ct.is-open, :root:not(.js) .ct) .ct-x {
   translate: -50% -50%; rotate: 180deg;
@@ -412,10 +437,11 @@ h1 {
 :is(.ct.is-open, :root:not(.js) .ct) .ct-shape.p-a,
 :is(.ct.is-open, :root:not(.js) .ct) .ct-shape.p-b {
   width: var(--card-w); height: var(--card-h);
-  transition: translate .95s var(--fling-soft), width 1s var(--jelly) .16s, height .8s var(--jelly) .12s, scale .35s var(--ease);
+  transition: left .95s var(--fling-soft), top .95s var(--fling-soft), width 1s var(--jelly) .16s, height .8s var(--jelly) .12s,
+              padding .35s var(--ease);
 }
-:is(.ct.is-open, :root:not(.js) .ct) .ct-shape.p-a { translate: calc(var(--ax) - 50%) calc(var(--ay) - 50%); }
-:is(.ct.is-open, :root:not(.js) .ct) .ct-shape.p-b { translate: calc(var(--bx) - 50%) calc(var(--by) - 50%); transition-delay: .05s, .21s, .17s, 0s; }
+:is(.ct.is-open, :root:not(.js) .ct) .ct-shape.p-a { left: calc(50% + var(--ax)); top: calc(50% + var(--ay)); }
+:is(.ct.is-open, :root:not(.js) .ct) .ct-shape.p-b { left: calc(50% + var(--bx)); top: calc(50% + var(--by)); transition-delay: .05s, .05s, .21s, .17s, 0s; }
 :is(.ct.is-open, :root:not(.js) .ct) .ct-opt {
   width: var(--card-w); height: var(--card-h);
   opacity: 1; visibility: visible; pointer-events: auto;
@@ -502,11 +528,11 @@ h2 { font-weight: 700; font-size: clamp(24px, 3vw, 32px); line-height: 1.15; let
   }
   .ct.is-open .ct-shape.p-ai, .ct.is-open .ct-shape.p-bi {
     width: 46px; height: 46px;
-    transition: width .6s var(--jelly) .38s, height .6s var(--jelly) .38s, translate .95s var(--fling-soft),
-                scale .3s var(--ease);
+    transition: width .6s var(--jelly) .38s, height .6s var(--jelly) .38s,
+                left .95s var(--fling-soft), top .95s var(--fling-soft), padding .3s var(--ease);
   }
-  .ct.is-open .ct-shape.p-ai { translate: calc(var(--aix) - 50%) calc(var(--aiy) - 50%); }
-  .ct.is-open .ct-shape.p-bi { translate: calc(var(--bix) - 50%) calc(var(--biy) - 50%); transition-delay: .43s, .43s, .05s, 0s; }
+  .ct.is-open .ct-shape.p-ai { left: calc(50% + var(--aix)); top: calc(50% + var(--aiy)); }
+  .ct.is-open .ct-shape.p-bi { left: calc(50% + var(--bix)); top: calc(50% + var(--biy)); transition-delay: .43s, .43s, .05s, .05s, 0s; }
   .ct-name { font-size: 15px; }
   .ct-addr { font-size: clamp(10px, 3.1vw, 12.5px); max-width: 100%; }
   /* the tiles cover the progress line, so it steps aside */
