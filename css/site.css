@@ -269,6 +269,10 @@ h1 {
 }
 .goo-rim { flood-color: var(--vl-border); }
 .goo-shadow { flood-color: var(--vl-ink); flood-opacity: .1; }
+/* When site.js can paint the liquid on a canvas, the shapes still move (they are what it reads)
+   but are not drawn themselves, and the SVG filter is switched off. */
+.ct.has-canvas .ct-goo { filter: none; opacity: 0; }
+.ct-canvas { position: absolute; pointer-events: none; }
 .defs { position: absolute; width: 0; height: 0; overflow: hidden; }
 
 /* every piece is placed from the centre */

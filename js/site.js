@@ -46,6 +46,205 @@
     document.addEventListener('pointerdown', function (e) {
       if (ct.classList.contains('is-open') && !e.target.closest('.ct-toggle, .ct-opt')) setOpen(false);
     });
+    drawLiquid(ct);
+  }
+
+  /* The liquid, drawn by the graphics chip (WebGL).
+     The white shapes in .ct-goo still do all the moving (site.css), but they are invisible here:
+     each frame this reads where they are and paints the liquid itself. For every pixel it does
+     the same sum the old SVG filter did — how much "blurred shape" reaches this point (blur 9px),
+     cut back to a hard edge so close shapes melt into one — plus a 1px rim and a soft shadow.
+     The browser's own SVG filter did that work on the main processor: phones redrew it slowly
+     (stutter) and sometimes didn't clean up after it (leftover strips). Here the whole canvas is
+     painted fresh every frame, at full sharpness, and only while something is moving.
+     Without WebGL the SVG filter stays in charge. */
+  function drawLiquid(ct) {
+    var goo = ct.querySelector('.ct-goo');
+    if (!goo) return;
+    var cv = document.createElement('canvas');
+    var gl;
+    try { gl = cv.getContext('webgl', { premultipliedAlpha: true, antialias: false, alpha: true }); } catch (e) { gl = null; }
+    if (!gl) return;
+
+    var MAX = 24;          // shapes plus the overlaps between them
+    var VS = 'attribute vec2 p; void main(){ gl_Position = vec4(p, 0.0, 1.0); }';
+    var FS = [
+      'precision highp float;',
+      'uniform vec2 uSize;',            // canvas size in CSS px
+      'uniform float uScale;',          // device px per CSS px
+      'uniform vec4 uBox[' + MAX + '];', // centre x, centre y, half width, half height (CSS px, y down)
+      'uniform vec2 uRad[' + MAX + '];', // corner radius, weight (+ a shape, − an overlap; small drops weigh less)
+      'uniform int uN;',
+      'uniform vec3 uFill; uniform vec3 uRim; uniform vec3 uShadow;',
+      'float sdBox(vec2 p, vec2 b, float r){ vec2 q = abs(p) - b + r; return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r; }',
+      // Blurred amount of shape at a point: the normal curve of its distance (blur = 9px).
+      // The blur of several shapes is the sum of their blurs minus the blur of where they
+      // overlap, so an overlap counts once — necks form between shapes, nothing bulges.
+      'float field(vec2 p){ float f = 0.0;',
+      '  for (int i = 0; i < ' + MAX + '; i++){ if (i >= uN) break;',
+      '    vec4 b = uBox[i]; float d = sdBox(p - b.xy, b.zw, uRad[i].x);',
+      '    f += uRad[i].y / (1.0 + exp(1.7017 * d / 9.0)); }',
+      '  return clamp(f, 0.0, 1.0); }',
+      'void main(){',
+      '  vec2 p = vec2(gl_FragCoord.x, uSize.y * uScale - gl_FragCoord.y) / uScale;',
+      '  float F = field(p);',
+      '  float af = clamp(24.0 * F - 11.0, 0.0, 1.0);',               // the liquid (same cut as the SVG filter)
+      '  float ar = clamp(24.0 * (F + 0.0443) - 11.0, 0.0, 1.0);',    // 1px wider: the rim
+      '  float as = min(field(p - vec2(0.0, 7.0)), 1.0) * 0.1;',      // shadow, 7px lower
+      '  float r1 = ar * (1.0 - af); float s1 = as * (1.0 - af) * (1.0 - ar);',
+      '  gl_FragColor = vec4(uFill * af + uRim * r1 + uShadow * s1, af + r1 + s1);',
+      '}'
+    ].join('\n');
+
+    function shader(type, src) {
+      var sh = gl.createShader(type);
+      gl.shaderSource(sh, src); gl.compileShader(sh);
+      return gl.getShaderParameter(sh, gl.COMPILE_STATUS) ? sh : null;
+    }
+    var vs = shader(gl.VERTEX_SHADER, VS), fs = shader(gl.FRAGMENT_SHADER, FS);
+    if (!vs || !fs) return;
+    var prog = gl.createProgram();
+    gl.attachShader(prog, vs); gl.attachShader(prog, fs); gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) return;
+    gl.useProgram(prog);
+    var buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);  // one big triangle
+    var loc = gl.getAttribLocation(prog, 'p');
+    gl.enableVertexAttribArray(loc);
+    gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+    var U = {};
+    ['uSize', 'uScale', 'uBox', 'uRad', 'uN', 'uFill', 'uRim', 'uShadow'].forEach(function (n) { U[n] = gl.getUniformLocation(prog, n); });
+
+    cv.className = 'ct-canvas';
+    cv.setAttribute('aria-hidden', 'true');
+    goo.parentNode.insertBefore(cv, goo.nextSibling);
+    ct.classList.add('has-canvas');
+
+    var shapes = goo.querySelectorAll('.ct-shape');
+    var boxes = new Float32Array(MAX * 4), rads = new Float32Array(MAX * 2);
+    var probe = document.createElement('canvas').getContext('2d');
+    var raf = 0, dead = false;
+
+    function rgb(v) {      // any CSS colour → [r, g, b] from 0 to 1
+      probe.fillStyle = '#000';
+      probe.fillStyle = (v || '').trim() || '#000';
+      var c = probe.fillStyle, m;
+      if (c.charAt(0) === '#') return [parseInt(c.substr(1, 2), 16) / 255, parseInt(c.substr(3, 2), 16) / 255, parseInt(c.substr(5, 2), 16) / 255];
+      m = c.match(/[\d.]+/g);
+      return [m[0] / 255, m[1] / 255, m[2] / 255];
+    }
+
+    // distance from a point to a rounded box (negative inside)
+    function sd(px, py, b) {
+      var qx = Math.abs(px - b.x) - b.w + b.r, qy = Math.abs(py - b.y) - b.h + b.r;
+      var ox = Math.max(qx, 0), oy = Math.max(qy, 0);
+      return Math.sqrt(ox * ox + oy * oy) + Math.min(Math.max(qx, qy), 0) - b.r;
+    }
+    // is rounded box a wholly inside rounded box b? (checks points round a's outline)
+    function inside(a, b) {
+      var k = a.r * 0.2929;   // a corner's 45° point, measured from the box corner
+      var pts = [[a.x - a.w, a.y], [a.x + a.w, a.y], [a.x, a.y - a.h], [a.x, a.y + a.h],
+                 [a.x - a.w + k, a.y - a.h + k], [a.x + a.w - k, a.y - a.h + k],
+                 [a.x - a.w + k, a.y + a.h - k], [a.x + a.w - k, a.y + a.h - k]];
+      for (var i = 0; i < pts.length; i++) if (sd(pts[i][0], pts[i][1], b) > 0.01) return false;
+      return true;
+    }
+    // the overlap of two rounded boxes, as a rounded box (or null if they don't touch)
+    function overlap(a, b) {
+      var l = Math.max(a.x - a.w, b.x - b.w), r = Math.min(a.x + a.w, b.x + b.w);
+      var t = Math.max(a.y - a.h, b.y - b.h), btm = Math.min(a.y + a.h, b.y + b.h);
+      if (r - l < 0.5 || btm - t < 0.5) return null;
+      var w = (r - l) / 2, h = (btm - t) / 2;
+      var o = { x: l + w, y: t + h, w: w, h: h, r: Math.min(Math.max(a.r, b.r), w, h) };
+      // the boxes may only touch at rounded corners: check the overlap really is inside both
+      return sd(o.x, o.y, a) < 0 && sd(o.x, o.y, b) < 0 ? o : null;
+    }
+
+    function draw() {
+      if (dead) return;
+      var g = goo.getBoundingClientRect(), box = ct.getBoundingClientRect();
+      var s = Math.min(window.devicePixelRatio || 1, 3);
+      var W = Math.max(1, Math.round(g.width * s)), H = Math.max(1, Math.round(g.height * s));
+      if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+      cv.style.left = (g.left - box.left) + 'px';
+      cv.style.top = (g.top - box.top) + 'px';
+      cv.style.width = g.width + 'px';
+      cv.style.height = g.height + 'px';
+
+      // the shapes, as rounded boxes (centre, half size, corner radius)
+      var list = [];
+      for (var i = 0; i < shapes.length; i++) {
+        var r = shapes[i].getBoundingClientRect();
+        if (r.width < 0.5 || r.height < 0.5) continue;
+        var cr = getComputedStyle(shapes[i]).borderTopLeftRadius;
+        var rad = cr.indexOf('%') > 0 ? r.width * parseFloat(cr) / 100 : parseFloat(cr) || 0;
+        list.push({ x: r.left - g.left + r.width / 2, y: r.top - g.top + r.height / 2,
+                    w: r.width / 2, h: r.height / 2, r: Math.min(rad, r.width / 2, r.height / 2) });
+      }
+      // a shape lying wholly inside another adds nothing to the liquid
+      list = list.filter(function (a, ia) {
+        return !list.some(function (b, ib) { return ib !== ia && inside(a, b) && (b.w * b.h > a.w * a.h || ib < ia); });
+      });
+      var n = 0;
+      function put(b, sign) {
+        if (n >= MAX) return;
+        var m = Math.min(b.w, b.h);
+        boxes[n * 4] = b.x; boxes[n * 4 + 1] = b.y; boxes[n * 4 + 2] = b.w; boxes[n * 4 + 3] = b.h;
+        rads[n * 2] = Math.min(b.r, m);
+        rads[n * 2 + 1] = sign * (1 - Math.exp(-m * m / 162));   // a 9px blur leaves small drops fainter: they melt away
+        n++;
+      }
+      list.forEach(function (b) { put(b, 1); });
+      // where two shapes overlap, take the overlap away once so it isn't counted twice
+      for (var a = 0; a < list.length; a++) for (var b = a + 1; b < list.length; b++) {
+        var o = overlap(list[a], list[b]);
+        if (o) put(o, -1);
+      }
+      var css = getComputedStyle(ct);
+      gl.viewport(0, 0, W, H);
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.uniform2f(U.uSize, g.width, g.height);
+      gl.uniform1f(U.uScale, s);
+      gl.uniform4fv(U.uBox, boxes);
+      gl.uniform2fv(U.uRad, rads);
+      gl.uniform1i(U.uN, n);
+      gl.uniform3fv(U.uFill, rgb(css.getPropertyValue('--vl-surface')));
+      gl.uniform3fv(U.uRim, rgb(css.getPropertyValue('--vl-border')));
+      gl.uniform3fv(U.uShadow, rgb(css.getPropertyValue('--vl-ink')));
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    }
+
+    function moving() {
+      var a = goo.getAnimations ? goo.getAnimations({ subtree: true }) : [];
+      for (var i = 0; i < a.length; i++) if (a[i].playState === 'running') return true;
+      return false;
+    }
+    function frame() {
+      raf = 0;
+      draw();
+      if (moving()) raf = requestAnimationFrame(frame);
+    }
+    function kick() { if (!raf) raf = requestAnimationFrame(frame); }
+
+    // if the graphics chip drops the canvas, hand back to the SVG filter
+    cv.addEventListener('webglcontextlost', function (e) {
+      e.preventDefault(); dead = true; ct.classList.remove('has-canvas'); cv.remove();
+    });
+
+    // redraw whenever a shape starts moving, the panel opens/closes, the size or theme changes
+    goo.addEventListener('transitionrun', kick);
+    goo.addEventListener('animationstart', kick);
+    new MutationObserver(kick).observe(ct, { attributes: true, attributeFilter: ['class'] });
+    new MutationObserver(draw).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    if (window.matchMedia) {
+      var mq = window.matchMedia('(prefers-color-scheme: dark)');
+      if (mq.addEventListener) mq.addEventListener('change', kick);
+    }
+    window.addEventListener('resize', kick);
+    window.addEventListener('load', kick);
+    draw();
   }
 
   var year = document.getElementById('year');
